@@ -1,24 +1,14 @@
 import { loadMathJax, App, Plugin, PluginManifest, PluginSettingTab, Setting, SettingDefinitionItem } from 'obsidian';
+import { setMathJaxGlobal, type MathJaxNormal } from "src/mathjax"
 
 interface PluginSettings {
   preamblePath: string;
+  mathjaxConfigPath: string;
 }
-
-declare global {
-  interface Window {
-    MathJax: {
-      tex2chtml: (preamble: string) => void;
-      startup: {
-        ready: () => void;
-        defaultReady: () => void;
-      };
-    };
-  }
-}
-
 
 const DEFAULT_SETTINGS: PluginSettings = {
   preamblePath: "preamble.sty",
+  mathjaxConfigPath: "preamble.json",
 };
 
 export default class JaxPlugin extends Plugin {
@@ -33,8 +23,8 @@ export default class JaxPlugin extends Plugin {
 
   async loadPreamble() {
     const preamble = await this.app.vault.adapter.read(this.settings.preamblePath);
-    const MathJax = window.MathJax;
-    if (MathJax.tex2chtml == undefined) {
+    const MathJax = window.MathJax as MathJaxNormal;
+    if (MathJax.tex2chtml === undefined) {
       MathJax.startup.ready = () => {
         MathJax.startup.defaultReady();
         MathJax.tex2chtml(preamble);
@@ -51,9 +41,22 @@ export default class JaxPlugin extends Plugin {
   async saveSettings() {
     await this.saveData(this.settings);
   }
+  
+  async loadMathJaxConfig() {
+    const config = await this.app.vault.adapter
+        .read(this.settings.mathjaxConfigPath)
+        .catch(() => null) as string | null;
+    if (!config) {
+      console.warn(`MathJax config file not found at ${this.settings.mathjaxConfigPath}`);
+      return;
+    }
+    const mathjaxConfig = JSON.parse(config) as Record<string, unknown>;
+    setMathJaxGlobal(mathjaxConfig);
+  }
 
   async onload() {
     await this.loadSettings();
+    await this.loadMathJaxConfig();
     this.addSettingTab(new JaxPluginSettingTab(this.app, this));
 
     // Load MathJax so that we can modify it
@@ -83,7 +86,7 @@ class JaxPluginSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
   
-  getSettingDefinitions(): SettingDefinitionItem[] {
+  getSettingDefinitions(): SettingDefinitionItem<keyof PluginSettings>[] {
     return [
       {
         name: "Preamble path",
@@ -92,6 +95,15 @@ class JaxPluginSettingTab extends PluginSettingTab {
           type: "file",
           key: "preamblePath",
           defaultValue: DEFAULT_SETTINGS.preamblePath,
+        }
+      },
+      {
+        name: "MathJax config path",
+        desc: "Path to json file that configures MathJax. Extended MathJax needs to be the first item in `<config-path>/community-plugins.json` in order for this to work. (Requires reload!)",
+        control: {
+          type: "file",
+          key: "mathjaxConfigPath",
+          defaultValue: DEFAULT_SETTINGS.mathjaxConfigPath,
         }
       }
     ]
