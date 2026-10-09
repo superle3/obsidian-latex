@@ -3,7 +3,7 @@ import obsidianmd from "eslint-plugin-obsidianmd";
 
 export default defineConfig([
   {
-    files: ["main.ts"],
+    files: ["src/**/*.ts"],
     extends: [obsidianmd.configs.recommended],
     languageOptions: {
       parserOptions: {
