@@ -1,8 +1,21 @@
-import { loadMathJax, App, Plugin, PluginManifest, PluginSettingTab, Setting } from 'obsidian';
+import { loadMathJax, App, Plugin, PluginManifest, PluginSettingTab, Setting, SettingDefinitionItem } from 'obsidian';
 
 interface PluginSettings {
   preamblePath: string;
 }
+
+declare global {
+  interface Window {
+    MathJax: {
+      tex2chtml: (preamble: string) => void;
+      startup: {
+        ready: () => void;
+        defaultReady: () => void;
+      };
+    };
+  }
+}
+
 
 const DEFAULT_SETTINGS: PluginSettings = {
   preamblePath: "preamble.sty",
@@ -20,7 +33,7 @@ export default class JaxPlugin extends Plugin {
 
   async loadPreamble() {
     const preamble = await this.app.vault.adapter.read(this.settings.preamblePath);
-
+    const MathJax = window.MathJax;
     if (MathJax.tex2chtml == undefined) {
       MathJax.startup.ready = () => {
         MathJax.startup.defaultReady();
@@ -32,7 +45,7 @@ export default class JaxPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as PluginSettings);
   }
 
   async saveSettings() {
@@ -47,7 +60,7 @@ export default class JaxPlugin extends Plugin {
     // Otherwise, it would not be loaded when this plugin is loaded
     await loadMathJax();
 
-    if (!MathJax) {
+    if (!window.MathJax) {
       console.warn("MathJax was not defined despite loading it.");
       return;
     }
@@ -58,7 +71,7 @@ export default class JaxPlugin extends Plugin {
 
   onunload() {
     // TODO: Is it possible to remove our definitions?
-    console.log('Unloading Extended MathJax');
+    console.debug('Unloading Extended MathJax');
   }
 }
 
@@ -69,6 +82,20 @@ class JaxPluginSettingTab extends PluginSettingTab {
     super(app, plugin);
     this.plugin = plugin;
   }
+  
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    return [
+      {
+        name: "Preamble path",
+        desc: "Path to global preamble. (Requires reload!)",
+        control: {
+          type: "file",
+          key: "preamblePath",
+          defaultValue: DEFAULT_SETTINGS.preamblePath,
+        }
+      }
+    ]
+  }
 
   display(): void {
     const { containerEl } = this;
@@ -78,9 +105,9 @@ class JaxPluginSettingTab extends PluginSettingTab {
       .setName('Preamble path')
       .setDesc('Path to global preamble. (Requires reload!)')
       .addText((text) =>
-	text
-	  .setValue(this.plugin.settings.preamblePath)
-	  .onChange(async (value) => {
+  text
+    .setValue(this.plugin.settings.preamblePath)
+    .onChange(async (value) => {
             this.plugin.settings.preamblePath = value;
             await this.plugin.saveSettings();
           })
